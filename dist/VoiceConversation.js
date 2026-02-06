@@ -108,7 +108,7 @@ class OpenAIClient {
         form.append('model', this.config.whisperModel);
         if (language)
             form.append('language', language);
-        form.append('file', new Blob([wavBuffer], { type: 'audio/wav' }), 'audio.wav');
+        form.append('file', new Blob([new Uint8Array(wavBuffer)], { type: 'audio/wav' }), 'audio.wav');
         const resp = await fetch('https://api.openai.com/v1/audio/transcriptions', {
             method: 'POST',
             headers: {
