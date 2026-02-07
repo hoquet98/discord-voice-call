@@ -9,11 +9,9 @@ export class DiscordVoiceProvider implements CallProvider {
   private ready = false;
 
   constructor(private context: PluginContext) {
-    const token = context.config.get('discord_token');
-    
-    // Initialize Discord Client
-    // NOTE: In a real environment, you might share one client across multiple plugins 
-    // or use a dedicated bot token for voice.
+    // Hardening: Support environment variables for tokens
+    const token = process.env.DISCORD_TOKEN || context.config.get('discord_token');
+
     this.client = new Client({
       intents: [
         GatewayIntentBits.Guilds,
@@ -28,32 +26,39 @@ export class DiscordVoiceProvider implements CallProvider {
     });
 
     this.client.on('error', (err) => {
-        this.context.logger.error('Discord Client Error', err);
+      this.context.logger.error('Discord Client Error', { error: err.message });
     });
 
     if (token) {
-        this.client.login(token).catch(err => {
-            this.context.logger.error('Failed to login to Discord', err);
-        });
+      this.client.login(token).catch(err => {
+        this.context.logger.error('Failed to login to Discord', { error: err.message });
+      });
     } else {
-        this.context.logger.warn('No discord_token found in config. Voice provider will not work until configured.');
+      this.context.logger.warn('No discord_token found in config or DISCORD_TOKEN env var. Voice provider will not work until configured.');
     }
   }
 
   async startCall(params: CallParams): Promise<CallSession> {
     if (!this.ready) {
-       // Attempt to wait or throw? Throwing is safer.
-       // User should ensure bot is ready.
-       if (!this.client.token) {
-           throw new Error('Discord token not configured');
-       }
-       throw new Error('Discord client not connected yet');
+      if (!this.client.token) {
+        throw new Error('Discord token not configured');
+      }
+      throw new Error('Discord client not connected yet');
     }
-    
+
+    // Hardening: Check for existing call in the same channel
+    const existingCall = Array.from(this.calls.values()).find(
+      call => call.status === 'connected' &&
+        (call as any).params.channelId === params.channelId
+    );
+    if (existingCall) {
+      this.context.logger.info('Call already exists in channel, returning existing');
+      return existingCall;
+    }
+
     const call = new DiscordCall(this.client, params, this.context);
     this.calls.set(call.id, call);
-    
-    // Clean up when call ends
+
     call.on('status', (status) => {
       if (status === 'disconnected') {
         this.calls.delete(call.id);
@@ -70,4 +75,22 @@ export class DiscordVoiceProvider implements CallProvider {
       this.calls.delete(callId);
     }
   }
+
+  // Hardening: Cleanup all calls on shutdown
+  async shutdown(): Promise<void> {
+    this.context.logger.info('Shutting down Discord Voice Provider');
+    const callIds = Array.from(this.calls.keys());
+    for (const callId of callIds) {
+      await this.endCall(callId);
+    }
+    if (this.client) {
+      this.client.destroy();
+    }
+  }
 }
+
+export default DiscordVoiceProvider;
+
+export * from './types.js';
+export * from './DiscordCall.js';
+export * from './VoiceConversation.js';

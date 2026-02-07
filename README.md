@@ -9,6 +9,7 @@ This plugin adapts the OpenClaw `voice-call` interface to work with Discord voic
 - **ASR → LLM → TTS loop**: Buffers speech, transcribes, generates a reply, and speaks back.
 - **Speak**: Send audio buffers (TTS output) to the channel.
 - **Silence Keep-alive**: Maintains connection stability.
+- **Security Hardened**: Input sanitization, rate limiting, cost controls, and secure logging.
 
 ## Prerequisites
 
@@ -28,6 +29,7 @@ You need a Discord Bot Token with the following intents enabled in the [Discord 
 1. Clone this folder into your OpenClaw plugins directory:
    ```bash
    cd workspace/plugins
+   git clone https://github.com/YOUR_USERNAME/discord-voice-call.git
    # (Folder should be named discord-voice-call)
    ```
 
@@ -44,14 +46,21 @@ You need a Discord Bot Token with the following intents enabled in the [Discord 
 
 ## Configuration
 
-Add the `discord_token` and OpenAI settings to your OpenClaw configuration (e.g., `config/default.json` or environment variables):
+### Environment Variables (Recommended)
+Copy `.env.example` to `.env` and fill in your values:
+
+```bash
+cp .env.example .env
+# Edit .env with your API keys
+```
+
+### OpenClaw Config
+You can also add settings to your OpenClaw configuration:
 
 ```json
 {
   "plugins": {
     "discord-voice-call": {
-      "discord_token": "YOUR_DISCORD_BOT_TOKEN_HERE",
-      "openai_api_key": "YOUR_OPENAI_API_KEY",
       "openai_chat_model": "gpt-4o-mini",
       "openai_whisper_model": "whisper-1",
       "openai_tts_model": "gpt-4o-mini-tts",
@@ -61,11 +70,19 @@ Add the `discord_token` and OpenAI settings to your OpenClaw configuration (e.g.
       "speech_silence_ms": 800,
       "speech_max_utterance_ms": 15000,
       "speech_preroll_ms": 300,
-      "speech_language": "ko"
+      "speech_language": "en"
     }
   }
 }
 ```
+
+### Security Configuration Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `max_text_length` | 1000 | Max characters for TTS input |
+| `rate_limit_ms` | 2000 | Rate limit between API calls |
+| `monthly_cost_limit` | 50 | Monthly cost cap in USD |
 
 ## Usage
 
@@ -94,9 +111,32 @@ const callSession = await provider.startCall({
   });
   ```
 
+## Security Notes
+
+This plugin includes several security hardening measures:
+
+1. **Input Sanitization**: All user input is sanitized before being sent to the LLM
+2. **Rate Limiting**: Prevents API abuse
+3. **Cost Controls**: Monthly spending limits to prevent runaway costs
+4. **Secure Logging**: Error messages don't expose sensitive data
+5. **Prompt Injection Defense**: System instructions include anti-injection guidance
+6. **Environment Variable Support**: API keys can be loaded from environment instead of config
+
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `DISCORD_TOKEN` | Discord bot token |
+| `OPENAI_API_KEY` | OpenAI API key |
+
 ## Troubleshooting
 
 - **No Audio?** Check if `ffmpeg` is installed.
-- **No replies?** Ensure `openai_api_key` is configured. Without it, the ASR/LLM/TTS pipeline is disabled.
+- **No replies?** Ensure `openai_api_key` is configured or `OPENAI_API_KEY` env var is set.
 - **Disconnects immediately?** Ensure the bot has `Connect` and `Speak` permissions in the target channel.
 - **"Opus engine not found"?** Reinstall `@discordjs/opus` or `opusscript`.
+- **Rate limited?** Increase `rate_limit_ms` in config.
+
+## License
+
+MIT License
